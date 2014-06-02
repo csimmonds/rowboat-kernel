@@ -152,7 +152,7 @@ static struct platform_pwm_backlight_data lcd7_bl_pdata = {
 	.ch             = 0,
 	.max_brightness = AM335X_BACKLIGHT_MAX_BRIGHTNESS,
 	.dft_brightness = AM335X_BACKLIGHT_DEFAULT_BRIGHTNESS,
-	.pwm_period_ns  = AM335X_PWM_PERIOD_NANO_SECONDS,
+	.pwm_period_ns  = AM335X_PWM_PERIOD_NANO_SECONDS * 100,
 };
 
 static struct lcd_ctrl_config lcd_cfg = {
