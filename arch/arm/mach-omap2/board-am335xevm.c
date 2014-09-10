@@ -68,6 +68,7 @@
 #include <plat/emif.h>
 #include <plat/nand.h>
 #include <plat/dma-33xx.h>
+#include <plat/sram.h>
 
 #include <media/soc_camera.h>
 #include <media/mt9t112.h>
@@ -3478,6 +3479,46 @@ static void am335x_opp_update(void)
 int am335xevm_vibrator_init(void);
 #endif
 
+#define REBOOT_FLAG_RECOVERY    0x52564352
+#define REBOOT_FLAG_FASTBOOT    0x54534146
+#define REBOOT_FLAG_NORMAL      0x4D524F4E
+#define REBOOT_FLAG_POWER_OFF   0x46464F50
+
+/* Write reboot flag to 16 bytes from the end of SRAM. The flag
+   can be read by a bootloader to determine the boot sequence.
+   For example on an Android device, "adb reboot bootloader" results in a
+   call to this function and the reboot flag becomes REBOOT_FLAG_FASTBOOT
+   which the bootloader should check and so enable fastboot */
+static int beagleboneblack_notifier_call(struct notifier_block *this,
+                                        unsigned long code, void *_cmd)
+{
+        void __iomem *reboot_reason_addr;
+        unsigned int flag = REBOOT_FLAG_NORMAL;
+
+        reboot_reason_addr = ioremap(AM33XX_SRAM_PA + 0xf000, SZ_4K);
+	if (reboot_reason_addr == NULL) {
+		pr_err("beagleboneblack_notifier_call: ioremap 0x%x failed\n", AM33XX_SRAM_PA + 0xf000);
+                return notifier_from_errno(-ENOMEM);
+	}
+
+        if (code == SYS_RESTART) {
+                if (_cmd) {
+                        if (!strcmp(_cmd, "recovery"))
+                                flag = REBOOT_FLAG_RECOVERY;
+                        else if (!strcmp(_cmd, "bootloader"))
+                                flag = REBOOT_FLAG_FASTBOOT;
+                }
+        } else if (code == SYS_POWER_OFF) {
+                flag = REBOOT_FLAG_POWER_OFF;
+        }
+        writel(flag, reboot_reason_addr + 0x0ff0); // PA 4030_fff0
+        return NOTIFY_DONE;
+}
+
+static struct notifier_block beagleboneblack_reboot_notifier = {
+        .notifier_call = beagleboneblack_notifier_call,
+};
+
 static void setup_general_purpose_evm(void)
 {
 	u32 prof_sel = am335x_get_profile_selection();
@@ -3560,6 +3601,8 @@ static void setup_beaglebone(void)
 static void setup_beaglebone_black(void)
 {
 	pr_info("The board is a AM335x Beaglebone Black.\n");
+
+	register_reboot_notifier(&beagleboneblack_reboot_notifier);
 
 	/* Beagle Bone has Micro-SD slot which doesn't have Write Protect pin */
 	am335x_mmc[0].gpio_wp = -EINVAL;
